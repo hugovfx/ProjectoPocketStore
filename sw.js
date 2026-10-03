@@ -1,5 +1,5 @@
-const CACHE_NAME = 'pocketstore-v1';
-const API_URL = 'jsonplaceholder.typicode.com';
+const CACHE_NAME = 'pocketstore-v2';
+const API_HOST = 'jsonplaceholder.typicode.com';
 const APP_SHELL = [
   './',
   './index.html',
@@ -13,18 +13,30 @@ const APP_SHELL = [
 ];
 
 // 1. INSTALL: guarda el App Shell en caché
+// Se cachea archivo por archivo: si uno falta, se avisa en consola
+// en lugar de cancelar toda la instalación (como hace addAll).
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.all(
+        APP_SHELL.map(url =>
+          cache.add(url).catch(err => console.warn('[SW] No se pudo cachear:', url, err))
+        )
+      )
+    )
   );
   self.skipWaiting();
 });
 
-// 2. ACTIVATE: borra cachés viejas
+// 2. ACTIVATE: borra cachés viejas de PocketStore
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter(k => k.startsWith('pocketstore-') && k !== CACHE_NAME)
+          .map(k => caches.delete(k))
+      )
     )
   );
   self.clients.claim();
@@ -35,8 +47,8 @@ self.addEventListener('fetch', event => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
-  // API: primero red, si falla usa la caché (datos offline)
-  if (request.url.includes(API_URL)) {
+  // API: primero red, si falla usa la copia guardada (datos offline)
+  if (request.url.includes(API_HOST)) {
     event.respondWith(
       fetch(request)
         .then(res => {
